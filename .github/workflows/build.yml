@@ -31,21 +31,53 @@ jobs:
           curl -fL -o mdk.zip https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-mdk.zip
           mkdir mdk
           unzip -q mdk.zip -d mdk
-          echo "--- mdk files ---"
-          find mdk -maxdepth 2 | head -40
 
       - name: Merge our mod into the MDK
         run: |
           MDK=$(dirname "$(find mdk -maxdepth 2 -name gradlew | head -1)")
           SRC=$(find proj -type d -path '*/src/main/java' | head -1 | sed 's#/main/java$##')
-          ADD=$(find proj -name gradle_additions.gradle | head -1)
           echo "MDK=$MDK"
           echo "SRC=$SRC"
-          echo "ADD=$ADD"
-          test -n "$MDK" && test -n "$SRC" && test -n "$ADD"
+          test -n "$MDK" && test -n "$SRC"
           rm -rf "$MDK/src"
           cp -r "$SRC" "$MDK/src"
-          cat "$ADD" >> "$MDK/build.gradle"
+          cat >> "$MDK/build.gradle" << 'EOF'
+
+          repositories {
+              mavenCentral()
+          }
+
+          jarJar.enable()
+
+          dependencies {
+              def jcv = '1.5.9'
+              def ff  = '6.0-1.5.9'
+              def oses = ['windows-x86_64', 'linux-x86_64', 'macosx-x86_64', 'macosx-arm64']
+
+              implementation("org.bytedeco:javacv:${jcv}") { transitive = false }
+              implementation "org.bytedeco:javacpp:${jcv}"
+              implementation "org.bytedeco:ffmpeg:${ff}"
+              oses.each { os ->
+                  implementation "org.bytedeco:javacpp:${jcv}:${os}"
+                  implementation "org.bytedeco:ffmpeg:${ff}:${os}"
+              }
+
+              jarJar(group: 'org.bytedeco', name: 'javacv', version: "[${jcv}]") { jarJar.pin(it, jcv) }
+              jarJar(group: 'org.bytedeco', name: 'javacpp', version: "[${jcv}]") { jarJar.pin(it, jcv) }
+              jarJar(group: 'org.bytedeco', name: 'ffmpeg', version: "[${ff}]") { jarJar.pin(it, ff) }
+              oses.each { os ->
+                  jarJar(group: 'org.bytedeco', name: 'javacpp', version: "[${jcv}]", classifier: os)
+                  jarJar(group: 'org.bytedeco', name: 'ffmpeg', version: "[${ff}]", classifier: os)
+              }
+          }
+
+          reobf {
+              jarJar { }
+          }
+          tasks.named('jarJar') {
+              finalizedBy 'reobfJarJar'
+          }
+          EOF
           sed -i 's/^mod_id=.*/mod_id=cutscene/' "$MDK/gradle.properties"
           sed -i 's/^mod_group_id=.*/mod_group_id=com.shabah.cutscene/' "$MDK/gradle.properties"
           echo "MDKROOT=$MDK" >> "$GITHUB_ENV"
