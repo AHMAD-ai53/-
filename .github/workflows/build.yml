@@ -15,19 +15,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Unzip my project
+            - name: Unzip my project
         run: |
-          unzip -q "$(ls *.zip | head -1)" -d proj
+          for z in *.zip; do
+            if unzip -l "$z" | grep -q gradle_additions.gradle; then
+              echo "Using $z"
+              unzip -q "$z" -d proj
+            fi
+          done
           echo "--- project files ---"
           find proj -maxdepth 4 | head -60
-
-      - name: Download Forge MDK 1.20.1
-        run: |
-          curl -fL -o mdk.zip https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-mdk.zip
-          mkdir mdk
-          unzip -q mdk.zip -d mdk
-          echo "--- mdk files ---"
-          find mdk -maxdepth 2 | head -40
 
       - name: Merge our mod into the MDK
         run: |
