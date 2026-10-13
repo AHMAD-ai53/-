@@ -8,9 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -18,23 +18,35 @@ jobs:
       - name: Unzip my project
         run: |
           unzip -q "$(ls *.zip | head -1)" -d proj
+          echo "--- project files ---"
+          find proj -maxdepth 4 | head -60
 
       - name: Download Forge MDK 1.20.1
         run: |
           curl -fL -o mdk.zip https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-mdk.zip
           mkdir mdk
           unzip -q mdk.zip -d mdk
+          echo "--- mdk files ---"
+          find mdk -maxdepth 2 | head -40
 
       - name: Merge our mod into the MDK
         run: |
-          rm -rf mdk/src
-          cp -r proj/src mdk/src
-          cat proj/gradle_additions.gradle >> mdk/build.gradle
-          sed -i 's/^mod_id=.*/mod_id=cutscene/' mdk/gradle.properties
-          sed -i 's/^mod_group_id=.*/mod_group_id=com.shabah.cutscene/' mdk/gradle.properties
+          MDK=$(dirname "$(find mdk -maxdepth 2 -name gradlew | head -1)")
+          SRC=$(find proj -type d -path '*/src/main/java' | head -1 | sed 's#/main/java$##')
+          ADD=$(find proj -name gradle_additions.gradle | head -1)
+          echo "MDK=$MDK"
+          echo "SRC=$SRC"
+          echo "ADD=$ADD"
+          test -n "$MDK" && test -n "$SRC" && test -n "$ADD"
+          rm -rf "$MDK/src"
+          cp -r "$SRC" "$MDK/src"
+          cat "$ADD" >> "$MDK/build.gradle"
+          sed -i 's/^mod_id=.*/mod_id=cutscene/' "$MDK/gradle.properties"
+          sed -i 's/^mod_group_id=.*/mod_group_id=com.shabah.cutscene/' "$MDK/gradle.properties"
+          echo "MDKROOT=$MDK" >> "$GITHUB_ENV"
 
       - name: Build
-        working-directory: mdk
+        working-directory: ${{ env.MDKROOT }}
         run: |
           chmod +x gradlew
           ./gradlew build jarJar --no-daemon --stacktrace
@@ -43,4 +55,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cutscene-mod
-          path: mdk/build/libs/*.jar
+          path: ${{ env.MDKROOT }}/build/libs/*.jar
